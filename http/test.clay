@@ -1,0 +1,12 @@
+import io.sockets.*;
+import http.*;
+import maybe.*;
+
+main() {
+    var url = parseUrl("http://www.google.ch");
+    var req = GetRequest();
+    writeRequest(req, just(url), stdout);
+    var sock = sendRequest(req, just(url));
+    var resp = parseResponse(sock, req);
+    println(resp);
+}

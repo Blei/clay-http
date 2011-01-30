@@ -1,0 +1,271 @@
+import parsing.combinators.strings.*;
+import io.sockets.*;
+import maybe.*;
+
+//
+// URL parsing
+//
+
+record Url (hostname: String, path: String, port: Int);
+//overload Url (hostname, path) = Url (hostname, path, 80);
+//overload Url (hostname) = Url(hostname, "/");
+
+// simplified model:
+// TODO _much_ too simple
+//
+// url -> scheme '://' domain maybePort maybePath
+// scheme -> 'http' 's'?
+// domain -> hostname | ipaddr
+// hostname -> [^/:]+
+// ipaddr ->  bleh
+// maybePort -> ':' [0-9]+
+// maybePath -> '/' [^?]* maybeQuery
+// maybeQuery -> '?' .*
+
+parseUrl(input) Maybe[Url] = parseUrl2(iterator(input));
+
+var scheme = choice("https", "http");
+var hostname = oneOrMore(condition(c => ((c != ':') and (c != '/'))));
+private digit?(c) = (c >= '0') and (c <= '9');
+var ipv4addr = oneOrMore(condition(c => ((c == '.') or digit?(c))));
+private lowHex?(c) = ((c >= 'a') and (c <= 'f'));
+private upHex?(c) = ((c >= 'A') and (c <= 'F'));
+private hexChar?(c) = digit?(c) or lowHex?(c) or upHex?(c);
+var ipv6addr = oneOrMore(condition(c => (hexChar?(c) or (c == ':'))));
+var ipaddr = choice(ipv4addr, ipv6addr);
+var domain = choice(hostname, ipaddr);
+var port = modify(x => Int(x.1), (':', oneOrMore(condition(digit?))));
+// XXX implement queries
+var path = oneOrMore(condition(c => true));
+var parseUrl2 = modify(constructUrl,
+    (scheme, literalString("://"), domain, optional(port), optional(path)));
+
+constructUrl(x) {
+    var scheme = x.0;
+    var domain = x.2;
+    var maybePort = x.3;
+    var maybePath = x.4;
+    if (scheme != "http") {
+        error("https not supported yet");
+    }
+    var port = just(maybePort, 80);
+    var path = just(maybePath, String("/"));
+    return move(Url(domain, path, port));
+}
+
+//
+// Request
+//
+record Request (
+    method: String,
+    headers: HashMap[String, String],
+    body: String,
+);
+
+GetRequest() = Request(String("GET"), HashMap[String,String](), String(""));
+PutRequest(body) = Request(String("PUT"), HashMap[String,String](), String(body));
+HeadRequest() = Request(String("HEAD"), HashMap[String,String](), String(""));
+
+private defaultHeaders(req, url) {
+    var headers = HashMap[String,String]();
+    alias putHeader = (k, v) ref=> ...put(headers, String(k), String(v));
+    if (url.port == 80) {
+        putHeader("host", url.hostname);
+    } else {
+        putHeader("host", url.hostname + ":" + printString(url.port));
+    }
+    putHeader("user-agent", "clay-http/0.1");
+    putHeader("accept", "*/*");
+    // TODO should we remove this?
+    //putHeader("connection", "close");
+    if (size(req.body) != 0) {
+        putHeader("content-length", printString(size(req.body)));
+    }
+    return move(headers);
+}
+
+// XXX, the order of headers is sometimes important
+private mergedHeaders(req, url) {
+    var merged = defaultHeaders(req, url);
+    for (k, v in items(req.headers)) {
+        put(merged, toLower(k), v);
+    }
+    return move(merged);
+}
+
+alias CRLF = "\r\n";
+
+writeRequest(req, url, stream) {
+    alias ws = str ref=> ...write(stream, str);
+
+    ws(req.method);
+    ws(" ");
+    ws(url.path);
+    ws(" HTTP/1.1\r\n");
+    var headers = mergedHeaders(req, url);
+    for (k, v in items(headers)) {
+    //for (k, v in items(mergedHeaders(req, url))) {
+        ws(k);
+        ws(": ");
+        ws(v);
+        ws(CRLF);
+    }
+    ws(CRLF);
+    ws(req.body);
+}
+
+sendRequest(req: Request, url: Url) {
+    var inet = Inet(url.hostname, url.port);
+    var sock = StreamSocket(inet);
+    var buf = String();
+    writeRequest(req, url, buf);
+    write(sock, buf);
+    return move(sock);
+}
+
+//
+// Response
+//
+
+record Response (
+    code: Int,
+    comment: String,
+    headers: HashMap[String,String],
+    body: String,
+);
+
+readUptoCrlf(stream) {
+    var buf = Vector[Char]();
+    while (true) {
+        readLine(stream, buf);
+        if (buf[size(buf) - 2] == '\r') {
+            return String(slicedUpto(buf, size(buf)-2));
+        }
+    }
+}
+
+private toLower(str) {
+    return map(c => {
+        if ((c >= 'A') and (c <= 'Z')) {
+            return Char(Int(c) - Int('A') + Int('a'));
+        } else {
+            return c;
+        }
+    }, str);
+}
+
+private parseHeaderLine(line) {
+    var i = find(line, ':');
+    var key = toLower(trim(sliced(line, begin(line), i)));
+    var val = trim(slicedFrom(line, i+1));
+    println(key, ": ", val);
+    return key, val;
+}
+
+private noContentCode?(code) {
+    return (code/100 == 1) or (code == 204) or (code == 304);
+}
+
+private hexValue(hex) {
+    var res = SizeT(0);
+    for (c in hex) {
+        if (digit?(c)) {
+            res = res * 16 + (Int(c) - Int('0'));
+        } else if (lowHex?(c)) {
+            res = res * 16 + (Int(c) - Int('a')) + 10;
+        } else if (upHex?(c)) {
+            res = res * 16 + (Int(c) - Int('A')) + 10;
+        } else {
+            error("char is not hex: ", c);
+        }
+    }
+    return res;
+}
+
+private readChunk(stream, buf) {
+    var line = readUptoCrlf(stream);
+    var i = find(line, ';');
+    var hex = trim(slicedUpto(line, i));
+    var n = hexValue(hex);
+    println(line, " in hex is ", n);
+    if (n == 0) {
+        return false;
+    } else {
+        var before = size(buf);
+        readN(stream, n, buf);
+        var after = size(buf);
+        println("have read ", after - before);
+        readUptoCrlf(stream);
+        return true;
+    }
+}
+
+private readChunked(stream, headers) {
+    var buf = String();
+    while (readChunk(stream, buf)) { }
+    parseHeaders(stream, headers);
+    return buf;
+}
+
+parseHeaders(stream, headers) {
+    alias nextLine = () ref=> readUptoCrlf(stream);
+
+    var line = nextLine();
+    if (size(line) <= 2) {
+        return;
+    }
+    var key, val = ...parseHeaderLine(line);
+    while (true) {
+        line = nextLine();
+        if (size(line) == 0) {
+            put(headers, key, val);
+            break;
+        } else if (line[0] == ' ' or line[0] == '\t') {
+            // continued header line
+            val += " " + trim(line);
+        } else {
+            put(headers, key, val);
+            key, val = ...parseHeaderLine(line);
+        }
+    }
+}
+
+parseResponse(stream, originalRequest) {
+    var line = readUptoCrlf(stream);
+    // XXX much too fragile, no future http support...
+    var code = Int(sliced(line, 9, 12));
+    var comment = String(slicedFrom(line, 13));
+
+    var headers = HashMap[String,String]();
+
+    parseHeaders(stream, headers);
+
+    if (noContentCode?(code) or originalRequest.method == "HEAD") {
+        return Response(code, move(comment), move(headers), move(String("")));
+    }
+
+    var ptr = lookup(headers, String("transfer-encoding"));
+    if (not null?(ptr)) {
+        var transferEncoding = ptr^;
+        var i = find(transferEncoding, ';');
+        var method = toLower(trim(slicedUpto(transferEncoding, i)));
+        if (method == "chunked") {
+            println("chunked transfer encoding found");
+            var body = readChunked(stream, headers);
+            return Response(code, move(comment), move(headers), body);
+        } else {
+            println("unknown transfer encoding: ", transferEncoding);
+            return Response(code, move(comment), move(headers), move(String("")));
+        }
+    }
+
+    ptr = lookup(headers, String("content-length"));
+    if (not null?(ptr)) {
+        var contentLength = SizeT(ptr^);
+        println("content length is ", contentLength);
+        return Response(code, move(comment), move(headers), readN(stream, contentLength));
+    }
+
+    println("neither transfer encoding nor content length could be found, reading all");
+    return Response(code, move(comment), move(headers), readAll(stream));
+}
