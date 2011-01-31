@@ -1,0 +1,12 @@
+import base64.*;
+
+main() {
+    println(encode([1,2,3,4,5,6]));
+    println(encode([1,2,3,4,5]));
+    println(encode([1,2,3,4]));
+    println(decode("AQIDBAUG"));
+    println(decode("AQIDBAU="));
+    println(decode("AQIDBA=="));
+    println(decode("AQIDBAU"));
+    println(decode("AQIDBA"));
+}

@@ -7,8 +7,6 @@ import maybe.*;
 //
 
 record Url (hostname: String, path: String, port: Int);
-//overload Url (hostname, path) = Url (hostname, path, 80);
-//overload Url (hostname) = Url(hostname, "/");
 
 // simplified model:
 // TODO _much_ too simple
@@ -17,20 +15,23 @@ record Url (hostname: String, path: String, port: Int);
 // scheme -> 'http' 's'?
 // domain -> hostname | ipaddr
 // hostname -> [^/:]+
-// ipaddr ->  bleh
+// ipaddr -> ipv4addr | ipv6addr
+// ipv4addr -> [.0-9]+
+// ipv6addr -> [:0-9a-fA-F]+
 // maybePort -> ':' [0-9]+
 // maybePath -> '/' [^?]* maybeQuery
 // maybeQuery -> '?' .*
 
 parseUrl(input) Maybe[Url] = parseUrl2(iterator(input));
 
-var scheme = choice("https", "http");
-var hostname = oneOrMore(condition(c => ((c != ':') and (c != '/'))));
 private digit?(c) = (c >= '0') and (c <= '9');
-var ipv4addr = oneOrMore(condition(c => ((c == '.') or digit?(c))));
 private lowHex?(c) = ((c >= 'a') and (c <= 'f'));
 private upHex?(c) = ((c >= 'A') and (c <= 'F'));
 private hexChar?(c) = digit?(c) or lowHex?(c) or upHex?(c);
+
+var scheme = choice("https", "http");
+var hostname = oneOrMore(condition(c => ((c != ':') and (c != '/'))));
+var ipv4addr = oneOrMore(condition(c => ((c == '.') or digit?(c))));
 var ipv6addr = oneOrMore(condition(c => (hexChar?(c) or (c == ':'))));
 var ipaddr = choice(ipv4addr, ipv6addr);
 var domain = choice(hostname, ipaddr);
@@ -76,7 +77,7 @@ private defaultHeaders(req, url) {
     }
     putHeader("user-agent", "clay-http/0.1");
     putHeader("accept", "*/*");
-    // TODO should we remove this?
+    // TODO should we send this, as we typically don't support persistent connections?
     //putHeader("connection", "close");
     if (size(req.body) != 0) {
         putHeader("content-length", printString(size(req.body)));
@@ -102,9 +103,7 @@ writeRequest(req, url, stream) {
     ws(" ");
     ws(url.path);
     ws(" HTTP/1.1\r\n");
-    var headers = mergedHeaders(req, url);
-    for (k, v in items(headers)) {
-    //for (k, v in items(mergedHeaders(req, url))) {
+    for (k, v in items(mergedHeaders(req, url))) {
         ws(k);
         ws(": ");
         ws(v);
@@ -187,14 +186,11 @@ private readChunk(stream, buf) {
     var i = find(line, ';');
     var hex = trim(slicedUpto(line, i));
     var n = hexValue(hex);
-    println(line, " in hex is ", n);
+    println(line);
     if (n == 0) {
         return false;
     } else {
-        var before = size(buf);
         readN(stream, n, buf);
-        var after = size(buf);
-        println("have read ", after - before);
         readUptoCrlf(stream);
         return true;
     }
