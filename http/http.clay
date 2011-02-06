@@ -96,7 +96,7 @@ private mergedHeaders(req, url) {
 
 alias CRLF = "\r\n";
 
-writeRequest(req, url, stream) {
+private writeRequest(req, url, stream) {
     alias ws = str ref=> ...write(stream, str);
 
     ws(req.method);
@@ -113,12 +113,16 @@ writeRequest(req, url, stream) {
     ws(req.body);
 }
 
-sendRequest(req: Request, url: Url) {
-    var inet = Inet(url.hostname, url.port);
-    var sock = StreamSocket(inet);
+sendRequest(sock, req, url) {
     var buf = String();
     writeRequest(req, url, buf);
     write(sock, buf);
+}
+
+overload sendRequest(req: Request, url: Url) {
+    var inet = Inet(url.hostname, url.port);
+    var sock = StreamSocket(inet);
+    sendRequest(sock, req, url);
     return move(sock);
 }
 
@@ -157,7 +161,7 @@ private parseHeaderLine(line) {
     var i = find(line, ':');
     var key = toLower(trim(sliced(line, begin(line), i)));
     var val = trim(slicedFrom(line, i+1));
-    println(key, ": ", val);
+    //println(key, ": ", val);
     return key, val;
 }
 
@@ -186,7 +190,7 @@ private readChunk(stream, buf) {
     var i = find(line, ';');
     var hex = trim(slicedUpto(line, i));
     var n = hexValue(hex);
-    println(line);
+    //println(line);
     if (n == 0) {
         return false;
     } else {
@@ -203,7 +207,7 @@ private readChunked(stream, headers) {
     return buf;
 }
 
-parseHeaders(stream, headers) {
+private parseHeaders(stream, headers) {
     alias nextLine = () ref=> readUptoCrlf(stream);
 
     var line = nextLine();
