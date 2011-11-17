@@ -6,30 +6,30 @@
 private var alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 private encode3(stream, a, b, c) {
-    var q = shiftRight(a, 2);
+    var q = bitshr(a, 2);
     write(stream, alphabet[q]);
-    var r = bitwiseOr(shiftLeft(bitwiseAnd(a, 3), 4), shiftRight(b, 4));
+    var r = bitor(bitshl(bitand(a, 3), 4), bitshr(b, 4));
     write(stream, alphabet[r]);
-    var s = bitwiseOr(shiftLeft(bitwiseAnd(b, 15), 2), shiftRight(c, 6));
+    var s = bitor(bitshl(bitand(b, 15), 2), bitshr(c, 6));
     write(stream, alphabet[s]);
-    var t = bitwiseAnd(c, 63);
+    var t = bitand(c, 63);
     write(stream, alphabet[t]);
 }
 
 private encode2(stream, a, b) {
-    var q = shiftRight(a, 2);
+    var q = bitshr(a, 2);
     write(stream, alphabet[q]);
-    var r = bitwiseOr(shiftLeft(bitwiseAnd(a, 3), 4), shiftRight(b, 4));
+    var r = bitor(bitshl(bitand(a, 3), 4), bitshr(b, 4));
     write(stream, alphabet[r]);
-    var s = shiftLeft(bitwiseAnd(b, 15), 2);
+    var s = bitshl(bitand(b, 15), 2);
     write(stream, alphabet[s]);
     write(stream, '=');
 }
 
 private encode1(stream, a) {
-    var q = shiftRight(a, 2);
+    var q = bitshr(a, 2);
     write(stream, alphabet[q]);
-    var r = shiftLeft(bitwiseAnd(a, 3), 4);
+    var r = bitshl(bitand(a, 3), 4);
     write(stream, alphabet[r]);
     write(stream, "==");
 }
@@ -59,27 +59,27 @@ overload encode(str) {
 // Decoding
 //
 
-private var revAlphabet = [
+private var revAlphabet = array(
         -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
         -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
         -1, -1, -1, 62, -1, -1, -1, 63, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, -1, -1,
         -1, 0, -1, -1, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
         18, 19, 20, 21, 22, 23, 24, 25, -1, -1, -1, -1, -1, -1, 26, 27, 28, 29, 30, 31,
         32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51
-    ];
+    );
 
 private decode4(stream, q, r, s, t) {
-    var a = bitwiseOr(shiftLeft(revAlphabet[q], 2), shiftRight(revAlphabet[r], 4));
+    var a = bitor(bitshl(revAlphabet[q], 2), bitshr(revAlphabet[r], 4));
     write(stream, a);
     if (s == Byte('=')) {
         return;
     }
-    var b = bitwiseOr(shiftLeft(bitwiseAnd(revAlphabet[r], 15), 4), shiftRight(revAlphabet[s], 2));
+    var b = bitor(bitshl(bitand(revAlphabet[r], 15), 4), bitshr(revAlphabet[s], 2));
     write(stream, b);
     if (t == Byte('=')) {
         return;
     }
-    var c = bitwiseOr(shiftLeft(bitwiseAnd(revAlphabet[s], 3), 6), revAlphabet[t]);
+    var c = bitor(bitshl(bitand(revAlphabet[s], 3), 6), revAlphabet[t]);
     write(stream, c);
 }
 

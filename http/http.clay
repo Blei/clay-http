@@ -22,7 +22,7 @@ record Url (hostname: String, path: String, port: Int);
 // maybePath -> '/' [^?]* maybeQuery
 // maybeQuery -> '?' .*
 
-parseUrl(input) Maybe[Url] = parseUrl2(iterator(input));
+parseUrl(input) : Maybe[Url] = parseUrl2(iterator(input));
 
 private digit?(c) = (c >= '0') and (c <= '9');
 private lowHex?(c) = ((c >= 'a') and (c <= 'f'));
@@ -35,11 +35,11 @@ var ipv4addr = oneOrMore(condition(c => ((c == '.') or digit?(c))));
 var ipv6addr = oneOrMore(condition(c => (hexChar?(c) or (c == ':'))));
 var ipaddr = choice(ipv4addr, ipv6addr);
 var domain = choice(hostname, ipaddr);
-var port = modify(x => Int(x.1), (':', oneOrMore(condition(digit?))));
+var port = modify(x => Int(x.1), [':', oneOrMore(condition(digit?))]);
 // XXX implement queries
 var path = oneOrMore(condition(c => true));
 var parseUrl2 = modify(constructUrl,
-    (scheme, literalString("://"), domain, optional(port), optional(path)));
+    [scheme, literalString("://"), domain, optional(port), optional(path)]);
 
 constructUrl(x) {
     var scheme = x.0;
@@ -69,18 +69,18 @@ HeadRequest() = Request(String("HEAD"), HashMap[String,String](), String(""));
 
 private defaultHeaders(req, url) {
     var headers = HashMap[String,String]();
-    alias putHeader = (k, v) ref=> ...put(headers, String(k), String(v));
+    alias putHeader = (k, v) -> ..put(headers, String(k), String(v));
     if (url.port == 80) {
         putHeader("host", url.hostname);
     } else {
-        putHeader("host", url.hostname + ":" + printString(url.port));
+        putHeader("host", url.hostname + ":" + str(url.port));
     }
     putHeader("user-agent", "clay-http/0.1");
     putHeader("accept", "*/*");
     // TODO should we send this, as we typically don't support persistent connections?
     //putHeader("connection", "close");
     if (size(req.body) != 0) {
-        putHeader("content-length", printString(size(req.body)));
+        putHeader("content-length", str(size(req.body)));
     }
     return move(headers);
 }
@@ -97,7 +97,7 @@ private mergedHeaders(req, url) {
 alias CRLF = "\r\n";
 
 private writeRequest(req, url, stream) {
-    alias ws = str ref=> ...write(stream, str);
+    alias ws = str -> ..write(stream, str);
 
     ws(req.method);
     ws(" ");
@@ -208,13 +208,13 @@ private readChunked(stream, headers) {
 }
 
 private parseHeaders(stream, headers) {
-    alias nextLine = () ref=> readUptoCrlf(stream);
+    alias nextLine = () -> readUptoCrlf(stream);
 
     var line = nextLine();
     if (size(line) <= 2) {
         return;
     }
-    var key, val = ...parseHeaderLine(line);
+    var key, val = ..parseHeaderLine(line);
     while (true) {
         line = nextLine();
         if (size(line) == 0) {
@@ -225,7 +225,7 @@ private parseHeaders(stream, headers) {
             val += " " + trim(line);
         } else {
             put(headers, key, val);
-            key, val = ...parseHeaderLine(line);
+            key, val = ..parseHeaderLine(line);
         }
     }
 }
