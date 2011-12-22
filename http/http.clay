@@ -96,7 +96,7 @@ private mergedHeaders(req, url) {
 
 alias CRLF = "\r\n";
 
-private writeRequest(req, url, stream) {
+writeRequest(req, url, stream) {
     alias ws = str -> ..write(stream, str);
 
     ws(req.method);
@@ -130,12 +130,43 @@ overload sendRequest(req: Request, url: Url) {
 // Response
 //
 
-record Response (
+record ResponseInfo (
     code: Int,
     comment: String,
     headers: HashMap[String,String],
+);
+
+record Response (
+    info: ResponseInfo,
     body: String,
 );
+
+overload Response(code, comment, headers, body) = Response(ResponseInfo(code, comment, headers), body);
+
+private readNChunked(stream, n: SizeT, callback) {
+    var buf = String();
+    var current = SizeT(0);
+    while (current < n) {
+        var numRead = read(stream, n - current, buf);
+        if (numRead == 0)
+            throw PrematureEOF(n, current);
+        callback(buf);
+        clear(buf);
+        current += numRead;
+    }
+}
+
+private readAllChunked(stream, callback) {
+    alias chunkSize = SizeT(4096);
+    var buf = String();
+    while (true) {
+        var numRead = read(stream, chunkSize, buf);
+        if (numRead == 0)
+            break;
+        callback(buf);
+        clear(buf);
+    }
+}
 
 readUptoCrlf(stream) {
     var buf = Vector[Char]();
@@ -185,7 +216,7 @@ private hexValue(hex) {
     return res;
 }
 
-private readChunk(stream, buf) {
+private readChunk(stream, callback) {
     var line = readUptoCrlf(stream);
     var i = find(line, ';');
     var hex = trim(slicedUpto(line, i));
@@ -194,17 +225,15 @@ private readChunk(stream, buf) {
     if (n == 0) {
         return false;
     } else {
-        readN(stream, n, buf);
+        readNChunked(stream, n, callback);
         readUptoCrlf(stream);
         return true;
     }
 }
 
-private readChunked(stream, headers) {
-    var buf = String();
-    while (readChunk(stream, buf)) { }
+private readChunked(stream, headers, callback) {
+    while (readChunk(stream, callback)) { }
     parseHeaders(stream, headers);
-    return buf;
 }
 
 private parseHeaders(stream, headers) {
@@ -231,6 +260,17 @@ private parseHeaders(stream, headers) {
 }
 
 parseResponse(stream, originalRequest) {
+    var info = ResponseInfo();
+    var buf = String();
+    parseResponseChunked(stream, originalRequest) : parsedInfo -> {
+        info = parsedInfo;
+    } :: chunk -> {
+        push(buf, chunk);
+    }
+    return Response(move(info), move(buf));
+}
+
+parseResponseChunked(stream, originalRequest, infoCallback, chunkCallback) {
     var line = readUptoCrlf(stream);
     // XXX much too fragile, no future http support...
     var code = Int(sliced(line, 9, 12));
@@ -239,9 +279,10 @@ parseResponse(stream, originalRequest) {
     var headers = HashMap[String,String]();
 
     parseHeaders(stream, headers);
+    infoCallback(ResponseInfo(code, comment, headers));
 
     if (noContentCode?(code) or originalRequest.method == "HEAD") {
-        return Response(code, move(comment), move(headers), move(String("")));
+        return;
     }
 
     var ptr = lookup(headers, String("transfer-encoding"));
@@ -251,11 +292,13 @@ parseResponse(stream, originalRequest) {
         var method = toLower(trim(slicedUpto(transferEncoding, i)));
         if (method == "chunked") {
             println("chunked transfer encoding found");
-            var body = readChunked(stream, headers);
-            return Response(code, move(comment), move(headers), body);
+            readChunked(stream, headers, chunkCallback);
+            // call infoCallback again, chunked encoding allows headers at the end as well
+            infoCallback(ResponseInfo(code, comment, headers));
+            return;
         } else {
             println("unknown transfer encoding: ", transferEncoding);
-            return Response(code, move(comment), move(headers), move(String("")));
+            return;
         }
     }
 
@@ -263,9 +306,10 @@ parseResponse(stream, originalRequest) {
     if (not null?(ptr)) {
         var contentLength = SizeT(ptr^);
         println("content length is ", contentLength);
-        return Response(code, move(comment), move(headers), readN(stream, contentLength));
+        readNChunked(stream, contentLength, chunkCallback);
+        return;
     }
 
     println("neither transfer encoding nor content length could be found, reading all");
-    return Response(code, move(comment), move(headers), readAll(stream));
+    readAllChunked(stream, chunkCallback);
 }
