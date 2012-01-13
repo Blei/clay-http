@@ -1,6 +1,7 @@
 import parsing.combinators.strings.*;
 import io.sockets.*;
 import maybe.*;
+import printer.formatter.(HEX);
 
 //
 // URL parsing
@@ -52,6 +53,34 @@ constructUrl(x) {
     var port = just(maybePort, 80);
     var path = just(maybePath, String("/"));
     return move(Url(domain, path, port));
+}
+
+private unreservedCharacter?(char) {
+    return (char >= 'a' and char <= 'z')
+        or (char >= 'A' and char <= 'Z')
+        or (char >= '0' and char <= '9')
+        or char == '-'
+        or char == '_'
+        or char == '.'
+        or char == '~';
+}
+
+uriEncode(string) {
+    var output = String();
+    for (char in string) {
+        if (unreservedCharacter?(char)) {
+            push(output, char);
+        } else {
+            if (Int(char) < 16) {
+                push(output, "%0");
+            } else {
+                push(output, '%');
+            }
+            var enc = str(HEX(Int(char)));
+            push(output, enc);
+        }
+    }
+    return move(output);
 }
 
 //

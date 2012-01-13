@@ -9,4 +9,6 @@ main() {
     var sock = sendRequest(req, just(url));
     var resp = parseResponse(sock, req);
     println(resp);
+
+    println(uriEncode("abc^^"));
 }
