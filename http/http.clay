@@ -30,7 +30,7 @@ private lowHex?(c) = ((c >= 'a') and (c <= 'f'));
 private upHex?(c) = ((c >= 'A') and (c <= 'F'));
 private hexChar?(c) = digit?(c) or lowHex?(c) or upHex?(c);
 
-var scheme = choice("https", "http");
+var scheme = choice(StringLiteralRef("https"), StringLiteralRef("http"));
 var hostname = oneOrMore(condition(c => ((c != ':') and (c != '/'))));
 var ipv4addr = oneOrMore(condition(c => ((c == '.') or digit?(c))));
 var ipv6addr = oneOrMore(condition(c => (hexChar?(c) or (c == ':'))));
@@ -40,7 +40,7 @@ var port = modify(x => Int(x.1), [':', oneOrMore(condition(digit?))]);
 // XXX implement queries
 var path = oneOrMore(condition(c => true));
 var parseUrl2 = modify(constructUrl,
-    [scheme, literalString("://"), domain, optional(port), optional(path)]);
+    [scheme, literalString(StringLiteralRef("://")), domain, optional(port), optional(path)]);
 
 constructUrl(x) {
     var scheme = x.0;
@@ -102,7 +102,7 @@ private defaultHeaders(req, url) {
     if (url.port == 80) {
         putHeader("host", url.hostname);
     } else {
-        putHeader("host", url.hostname + ":" + str(url.port));
+        putHeader("host", url.hostname ++ ":" ++ str(url.port));
     }
     putHeader("user-agent", "clay-http/0.1");
     putHeader("accept", "*/*");
@@ -226,7 +226,7 @@ private parseHeaderLine(line) {
 }
 
 private noContentCode?(code) {
-    return (code/100 == 1) or (code == 204) or (code == 304);
+    return (code\100 == 1) or (code == 204) or (code == 304);
 }
 
 private hexValue(hex) {
@@ -280,7 +280,7 @@ private parseHeaders(stream, headers) {
             break;
         } else if (line[0] == ' ' or line[0] == '\t') {
             // continued header line
-            val += " " + trim(line);
+            val ++= " " ++ trim(line);
         } else {
             put(headers, key, val);
             key, val = ..parseHeaderLine(line);
