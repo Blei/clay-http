@@ -280,7 +280,8 @@ private parseHeaders(stream, headers) {
             break;
         } else if (line[0] == ' ' or line[0] == '\t') {
             // continued header line
-            val ++= " " ++ trim(line);
+            // the () around the ++ are a workaround for https://github.com/jckarter/clay/issues/249
+            val ++= (" " ++ trim(line));
         } else {
             put(headers, key, val);
             key, val = ..parseHeaderLine(line);
