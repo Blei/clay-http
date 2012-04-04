@@ -181,7 +181,7 @@ private readNChunked(stream, n: SizeT, callback) {
             throw PrematureEOF(n, current);
         callback(buf);
         clear(buf);
-        current += numRead;
+        current +: numRead;
     }
 }
 
@@ -280,7 +280,7 @@ private parseHeaders(stream, headers) {
             break;
         } else if (line[0] == ' ' or line[0] == '\t') {
             // continued header line
-            val ++= " " ++ trim(line);
+            val ++: " " ++ trim(line);
         } else {
             put(headers, key, val);
             key, val = ..parseHeaderLine(line);
