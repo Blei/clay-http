@@ -1,7 +1,11 @@
-import parsing.combinators.strings.*;
+import algorithms.(find);
+import algorithms.strings.(trim);
+import hashmaps.*;
 import io.sockets.*;
 import maybe.*;
+import parsing.combinators.strings.*;
 import printer.formatter.(HEX);
+import printer.(error, println, str);
 
 //
 // URL parsing
