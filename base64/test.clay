@@ -1,12 +1,22 @@
 import base64.*;
+import printer.(println);
+import test.*;
 
-main() {
-    println(encode(array(1,2,3,4,5,6)));
-    println(encode(array(1,2,3,4,5)));
-    println(encode(array(1,2,3,4)));
-    println(decode("AQIDBAUG"));
-    println(decode("AQIDBAU="));
-    println(decode("AQIDBA=="));
-    println(decode("AQIDBAU"));
-    println(decode("AQIDBA"));
-}
+main() = testMain(
+    TestSuite(
+        "base 64", array(
+            TestCase("encoding", -> {
+                expectEqual(encode(array(1,2,3,4,5,6)), "AQIDBAUG");
+                expectEqual(encode(array(1,2,3,4,5)),   "AQIDBAU=");
+                expectEqual(encode(array(1,2,3,4)),     "AQIDBA==");
+            }),
+            TestCase("decoding", -> {
+                expectEqual(decode("AQIDBAUG"), array(1,2,3,4,5,6));
+                expectEqual(decode("AQIDBAU="), array(1,2,3,4,5));
+                expectEqual(decode("AQIDBA=="), array(1,2,3,4));
+                expectEqual(decode("AQIDBAU"),  array(1,2,3,4,5));
+                expectEqual(decode("AQIDBA"),   array(1,2,3,4));
+            })
+        )
+    )
+);

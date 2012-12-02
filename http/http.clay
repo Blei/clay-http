@@ -1,9 +1,29 @@
-import algorithms.(find);
-import algorithms.strings.(trim);
-import hashmaps.*;
-import io.sockets.*;
-import maybe.*;
-import parsing.combinators.strings.*;
+import data.algorithms.(find);
+import data.algorithms.strings.(trim);
+import data.hashmaps.(HashMap);
+import data.sequences.(map);
+import data.sequences.(
+    sliced,
+    slicedFrom,
+    slicedUpto);
+import data.strings.(String);
+import data.vectors.(Vector);
+import io.sockets.(
+    Inet,
+    StreamSocket);
+import io.streams.(
+    PrematureEOF,
+    read,
+    readLine,
+    write);
+import numbers.parser.(parse);
+import parsing.combinators.strings.(
+    choice,
+    condition,
+    literalString,
+    modify,
+    oneOrMore,
+    optional);
 import printer.formatter.(HEX);
 import printer.(error, println, str);
 
@@ -40,7 +60,7 @@ var ipv4addr = oneOrMore(condition(c => ((c == '.') or digit?(c))));
 var ipv6addr = oneOrMore(condition(c => (hexChar?(c) or (c == ':'))));
 var ipaddr = choice(ipv4addr, ipv6addr);
 var domain = choice(hostname, ipaddr);
-var port = modify(x => Int(x.1), [':', oneOrMore(condition(digit?))]);
+var port = modify(x => parse(Int, x.1), [':', oneOrMore(condition(digit?))]);
 // XXX implement queries
 var path = oneOrMore(condition(c => true));
 var parseUrl2 = modify(constructUrl,
@@ -146,7 +166,9 @@ writeRequest(req, url, stream) {
     ws(req.body);
 }
 
-sendRequest(sock, req, url) {
+define sendRequest;
+
+overload sendRequest(sock, req, url) {
     var buf = String();
     writeRequest(req, url, buf);
     write(sock, buf);
@@ -295,18 +317,18 @@ private parseHeaders(stream, headers) {
 parseResponse(stream, originalRequest) {
     var info = ResponseInfo();
     var buf = String();
-    parseResponseChunked(stream, originalRequest) : parsedInfo -> {
+    parseResponseChunked(stream, originalRequest, parsedInfo -> {
         info = parsedInfo;
-    } :: chunk -> {
+    }, chunk -> {
         push(buf, chunk);
-    }
+    });
     return Response(move(info), move(buf));
 }
 
 parseResponseChunked(stream, originalRequest, infoCallback, chunkCallback) {
     var line = readUptoCrlf(stream);
     // XXX much too fragile, no future http support...
-    var code = Int(sliced(line, 9, 12));
+    var code = parse(Int, sliced(line, 9, 12));
     var comment = String(slicedFrom(line, 13));
 
     var headers = HashMap[String,String]();
@@ -337,7 +359,7 @@ parseResponseChunked(stream, originalRequest, infoCallback, chunkCallback) {
 
     ptr = lookup(headers, String("content-length"));
     if (not null?(ptr)) {
-        var contentLength = SizeT(ptr^);
+        var contentLength = parse(SizeT, ptr^);
         println("content length is ", contentLength);
         readNChunked(stream, contentLength, chunkCallback);
         return;

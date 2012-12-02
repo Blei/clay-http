@@ -1,3 +1,7 @@
+import data.strings.(String);
+import data.vectors.(Vector);
+import io.streams.(write);
+import printer.(error);
 
 //
 // Encoding
@@ -34,9 +38,11 @@ private encode1(stream, a) {
     write(stream, "==");
 }
 
-encode(stream, str) {
+define encode;
+
+overload encode(stream, str) {
     var n = size(str);
-    var fullRounds = n/3;
+    var fullRounds = n\3;
     var rest = remainder(n, 3);
     for (i in range(fullRounds)) {
         encode3(stream, str[i*3], str[i*3 + 1], str[i*3 + 2]);
@@ -83,9 +89,11 @@ private decode4(stream, q, r, s, t) {
     write(stream, c);
 }
 
-decode(stream, str) {
+define decode;
+
+overload decode(stream, str) {
     var n = size(str);
-    var fullRounds = n/4;
+    var fullRounds = n\4;
     var rest = remainder(n, 4);
     if (rest == 1) {
         error("a sequence of remainder(length, 4) == 1 has been entered, not supported");

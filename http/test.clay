@@ -1,6 +1,6 @@
-import io.sockets.*;
+import io.files.(stdout);
 import http.*;
-import maybe.*;
+import printer.(println);
 
 main() {
     var url = parseUrl("http://www.google.ch");
